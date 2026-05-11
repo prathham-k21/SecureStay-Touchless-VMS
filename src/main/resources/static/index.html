@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureStay | Terminal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/html5-qrcode"></script>
+
+    <style>
+        :root {
+            --bg: #0f172a; --card-bg: #1e293b; --text-main: #f8fafc;
+            --text-muted: #94a3b8; --border: #334155; --primary: #6366f1;
+            --input-bg: #0f172a; --success: #22c55e;
+        }
+        .light-mode {
+            --bg: #f1f5f9; --card-bg: #ffffff; --text-main: #0f172a;
+            --text-muted: #64748b; --border: #e2e8f0; --primary: #4f46e5;
+            --input-bg: #f8fafc;
+        }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text-main); margin: 0; padding: 40px 20px; transition: 0.3s; }
+        .container { max-width: 1000px; margin: auto; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; border-left: 4px solid var(--primary); padding-left: 20px; }
+        #theme-toggle { background: var(--card-bg); border: 1px solid var(--border); color: var(--text-main); padding: 8px 15px; border-radius: 99px; cursor: pointer; display: flex; gap: 8px; }
+        .grid-layout { display: grid; grid-template-columns: 320px 1fr; gap: 30px; }
+        .glass-card { background: var(--card-bg); padding: 25px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        input { width: 100%; padding: 12px; margin-bottom: 15px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text-main); box-sizing: border-box; }
+        .btn-checkin { background-color: var(--primary); color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: 600; transition: 0.2s; }
+        .btn-checkin:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-scan { background-color: var(--success); color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: 600; margin-bottom: 20px; transition: 0.2s; }
+        .btn-scan.active { background-color: #ef4444; } /* Red when scanning to act as a 'Stop' button */
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 12px; color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+        td { padding: 16px 12px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+        .btn-out { background: rgba(244, 63, 94, 0.1); color: #ef4444; border: 1px solid rgba(244, 63, 94, 0.2); padding: 5px 12px; border-radius: 6px; cursor: pointer; }
+        @media (max-width: 850px) { .grid-layout { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body class="night-mode">
+
+<div class="container">
+    <header>
+        <div>
+            <h1>SecureStay</h1>
+            <p style="color:var(--text-muted); margin:0">Touchless Terminal v3.0</p>
+        </div>
+        <button id="theme-toggle" onclick="toggleTheme()">
+            <span id="theme-icon">🌙</span> <span id="theme-text">Night Mode</span>
+        </button>
+    </header>
+
+    <div class="glass-card" style="margin-bottom: 30px; text-align: center;">
+        <button id="scan-btn" class="btn-scan" onclick="toggleScanner()">📷 Scan Pass to Checkout</button>
+        <div id="reader" style="width: 100%; max-width: 400px; margin: 10px auto; display: none; border-radius: 12px; overflow: hidden;"></div>
+    </div>
+
+    <div class="grid-layout">
+        <div class="glass-card">
+            <h2 style="color:var(--primary); margin-top:0">Entry Form</h2>
+            <input type="text" id="name" placeholder="Visitor Name">
+            <input type="email" id="email" placeholder="Visitor Email">
+            <input type="text" id="phone" placeholder="Phone Number">
+            <input type="text" id="hostName" placeholder="Host Name">
+            <input type="email" id="hostEmail" placeholder="Host Email">
+            <button class="btn-checkin" onclick="checkIn()">Check In</button>
+        </div>
+
+        <div class="glass-card">
+            <h2 style="margin-top:0">Live Directory</h2>
+            <table>
+                <thead>
+                <tr><th>Visitor</th><th>Host</th><th>Action</th></tr>
+                </thead>
+                <tbody id="visitorTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    let html5QrCode;
+    window.onload = loadActive;
+
+    function toggleTheme() {
+        document.body.classList.toggle('light-mode');
+        const isLight = document.body.classList.contains('light-mode');
+        document.getElementById('theme-icon').innerText = isLight ? '☀️' : '🌙';
+        document.getElementById('theme-text').innerText = isLight ? 'Day Mode' : 'Night Mode';
+    }
+
+    async function checkIn() {
+        const btn = document.querySelector('.btn-checkin');
+        btn.disabled = true;
+        btn.innerText = "Encrypting & Sending Pass...";
+
+        const data = {
+            name: document.getElementById('name').value,
+            email: document.getElementById('email').value,
+            phone: document.getElementById('phone').value,
+            hostName: document.getElementById('hostName').value,
+            hostEmail: document.getElementById('hostEmail').value
+        };
+
+        try {
+            const res = await fetch('/api/visitors/check-in', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (res.ok) {
+                await loadActive();
+                clearInputs();
+                alert("Success! A Secure QR Pass has been sent to " + data.email);
+            } else {
+                alert("Check-in failed. Please verify the email address.");
+            }
+        } catch (error) {
+            console.error("Connection error:", error);
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "Check In";
+        }
+    }
+
+    async function loadActive() {
+        const res = await fetch('/api/visitors/active');
+        const visitors = await res.json();
+        const tableBody = document.getElementById('visitorTable');
+        tableBody.innerHTML = visitors.map(v => `
+            <tr>
+                <td><b>${v.name}</b><br><small style="color:var(--text-muted)">${v.phone}</small></td>
+                <td>${v.hostName}<br><small style="color:var(--text-muted)">${v.hostEmail}</small></td>
+                <td><button class="btn-out" onclick="checkOut(${v.id})">Manual Out</button></td>
+            </tr>
+        `).join('');
+    }
+
+    async function checkOut(id) {
+        const res = await fetch('/api/visitors/check-out/' + id, { method: 'PUT' });
+        if (res.ok) {
+            loadActive();
+            return true;
+        }
+        return false;
+    }
+
+    function toggleScanner() {
+        const reader = document.getElementById('reader');
+        const btn = document.getElementById('scan-btn');
+
+        if (reader.style.display === 'none') {
+            reader.style.display = 'block';
+            btn.innerText = "🛑 Stop Scanner";
+            btn.classList.add('active');
+            startScanner();
+        } else {
+            stopScanner();
+        }
+    }
+
+    function startScanner() {
+        html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start(
+            { facingMode: "user" },
+            { fps: 10, qrbox: 250 },
+            async (decodedText) => {
+                const success = await checkOut(decodedText);
+                if (success) {
+                    alert("Checkout Successful! Thank you for visiting.");
+                    stopScanner();
+                }
+            },
+            () => {}
+        ).catch(err => {
+            console.error("Camera access denied", err);
+            stopScanner();
+        });
+    }
+
+    function stopScanner() {
+        const reader = document.getElementById('reader');
+        const btn = document.getElementById('scan-btn');
+        if (html5QrCode) {
+            html5QrCode.stop().then(() => {
+                reader.style.display = 'none';
+                btn.innerText = "📷 Scan Pass to Checkout";
+                btn.classList.remove('active');
+            });
+        }
+    }
+
+    function clearInputs() {
+        document.querySelectorAll('input').forEach(i => i.value = '');
+    }
+</script>
+</body>
+</html>
