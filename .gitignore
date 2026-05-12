@@ -1,8 +1,12 @@
 HELP.md
 target/
-.mvn/wrapper/maven-wrapper.jar
+!.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+
+### Custom SecureStay Ignores ###
+*.class
+application.properties
 
 ### STS ###
 .apt_generated
@@ -31,7 +35,3 @@ build/
 
 ### VS Code ###
 .vscode/
-/target/
-.idea/
-*.class
-application.properties
